@@ -1,11 +1,10 @@
-import { generateJson } from './gemini.js'
 import { HttpError } from './http.js'
 import { PLANNER_SYSTEM_PROMPT } from './prompts.js'
+import { askForJson, InvalidAnswer } from './structured.js'
 
 const MAX_REQUEST_CHARS = 2_000
 const MAX_SOURCE_CHARS = 300_000
 const MAX_STEPS = 12
-const ATTEMPTS = 2
 
 const text = (description) => ({ type: 'string', description })
 const list = (items, description) => ({ type: 'array', items, description })
@@ -19,6 +18,7 @@ const PLAN_SCHEMA = {
     audience: text('Who is learning'),
     style: text('How to teach, for example "Socratic"'),
     durationMinutes: { type: 'integer', description: 'Length of the lesson in minutes' },
+    askFirst: { type: 'boolean', description: 'True when the tutor should ask questions before explaining, for example in a Socratic style' },
     steps: {
       type: 'array',
       minItems: 1,
@@ -31,17 +31,19 @@ const PLAN_SCHEMA = {
           keyPoints: list({ type: 'string' }, 'The facts from the source to teach in this step'),
           checkQuestion: text('A question that checks understanding of this step'),
           expectedAnswer: text('What a correct answer contains'),
+          hints: {
+            ...list({ type: 'string' }, 'Exactly two hints for a student who is stuck, from vague to specific. A hint never states the answer'),
+            minItems: 2,
+            maxItems: 2,
+          },
           sourceIds: list({ type: 'string' }, 'Ids of the source passages this step is based on, for example "p3"'),
         },
-        required: ['title', 'goal', 'keyPoints', 'checkQuestion', 'expectedAnswer', 'sourceIds'],
+        required: ['title', 'goal', 'keyPoints', 'checkQuestion', 'expectedAnswer', 'hints', 'sourceIds'],
       },
     },
   },
-  required: ['title', 'language', 'audience', 'style', 'durationMinutes', 'steps'],
+  required: ['title', 'language', 'audience', 'style', 'durationMinutes', 'askFirst', 'steps'],
 }
-
-/** Raised when the model's answer is not a usable plan; the model gets one more try. */
-class PlanError extends Error {}
 
 /** Checks the request body and returns what the planner needs, or throws an HttpError the client can show. */
 export function parsePlanRequest(body) {
@@ -68,18 +70,19 @@ export function parsePlanRequest(body) {
   return { teacherPrompt, passages }
 }
 
-/** Returns a clean plan, or throws a PlanError saying what is wrong. Passage ids the model invented are dropped. */
+/** Returns a clean plan, or throws an InvalidAnswer saying what is wrong. Passage ids the model invented are dropped. */
 export function validatePlan(raw, passages) {
   const knownIds = new Set(passages.map(({ id }) => id))
   const needText = (value, field) => {
-    if (typeof value !== 'string' || !value.trim()) throw new PlanError(`${field} is missing`)
+    if (typeof value !== 'string' || !value.trim()) throw new InvalidAnswer(`${field} is missing`)
     return value.trim()
   }
 
   if (!Array.isArray(raw?.steps) || raw.steps.length === 0 || raw.steps.length > MAX_STEPS) {
-    throw new PlanError(`the plan needs between 1 and ${MAX_STEPS} steps`)
+    throw new InvalidAnswer(`the plan needs between 1 and ${MAX_STEPS} steps`)
   }
-  if (!Number.isFinite(raw.durationMinutes) || raw.durationMinutes <= 0) throw new PlanError('durationMinutes is missing')
+  if (!Number.isFinite(raw.durationMinutes) || raw.durationMinutes <= 0) throw new InvalidAnswer('durationMinutes is missing')
+  if (typeof raw.askFirst !== 'boolean') throw new InvalidAnswer('askFirst is missing')
 
   return {
     title: needText(raw.title, 'title'),
@@ -87,13 +90,17 @@ export function validatePlan(raw, passages) {
     audience: needText(raw.audience, 'audience'),
     style: needText(raw.style, 'style'),
     durationMinutes: Math.round(raw.durationMinutes),
+    askFirst: raw.askFirst,
     steps: raw.steps.map((step, index) => {
       const label = `step ${index + 1}`
       const keyPoints = Array.isArray(step?.keyPoints) ? step.keyPoints.map((point) => needText(point, `${label} key point`)) : []
-      if (keyPoints.length === 0) throw new PlanError(`${label} has no key points`)
+      if (keyPoints.length === 0) throw new InvalidAnswer(`${label} has no key points`)
+
+      const hints = Array.isArray(step.hints) ? step.hints.map((hint) => needText(hint, `${label} hint`)) : []
+      if (hints.length !== 2) throw new InvalidAnswer(`${label} needs exactly two hints`)
 
       const sourceIds = [...new Set(Array.isArray(step.sourceIds) ? step.sourceIds : [])].filter((id) => knownIds.has(id))
-      if (sourceIds.length === 0) throw new PlanError(`${label} cites no passage from the source`)
+      if (sourceIds.length === 0) throw new InvalidAnswer(`${label} cites no passage from the source`)
 
       return {
         id: `step-${index + 1}`,
@@ -102,6 +109,7 @@ export function validatePlan(raw, passages) {
         keyPoints,
         checkQuestion: needText(step.checkQuestion, `${label} check question`),
         expectedAnswer: needText(step.expectedAnswer, `${label} expected answer`),
+        hints,
         sourceIds,
       }
     }),
@@ -114,19 +122,14 @@ function buildPrompt(teacherPrompt, passages) {
 }
 
 /** Asks Gemini for a lesson plan and returns it validated. Retries once if the first answer is not usable. */
-export async function createPlan({ apiKey, teacherPrompt, passages, signal }) {
-  const prompt = buildPrompt(teacherPrompt, passages)
-  let problem = ''
-
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    const retryNote = problem ? `\n\nYour previous answer was rejected: ${problem}. Answer again and fix this.` : ''
-    try {
-      const raw = await generateJson({ apiKey, system: PLANNER_SYSTEM_PROMPT, prompt: prompt + retryNote, schema: PLAN_SCHEMA, signal })
-      return validatePlan(raw, passages)
-    } catch (error) {
-      if (!(error instanceof PlanError || error instanceof SyntaxError)) throw error
-      problem = error.message
-    }
-  }
-  throw new HttpError(502, 'plan_invalid', 'Could not build a valid lesson plan. Try again, or use a shorter source.')
+export function createPlan({ apiKey, teacherPrompt, passages, signal }) {
+  return askForJson({
+    apiKey,
+    system: PLANNER_SYSTEM_PROMPT,
+    prompt: buildPrompt(teacherPrompt, passages),
+    schema: PLAN_SCHEMA,
+    validate: (raw) => validatePlan(raw, passages),
+    failure: { code: 'plan_invalid', message: 'Could not build a valid lesson plan. Try again, or use a shorter source.' },
+    signal,
+  })
 }

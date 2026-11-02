@@ -1,6 +1,7 @@
 import { describeGeminiError, streamGemini } from '../server/gemini.js'
-import { sendError, startEventStream, writeEvent } from '../server/http.js'
-import { TUTOR_SYSTEM_PROMPT } from '../server/prompts.js'
+import { HttpError, sendError, startEventStream, writeEvent } from '../server/http.js'
+import { tutorSystemPrompt } from '../server/prompts.js'
+import { parseTeachRequest } from '../server/tutor.js'
 
 // Give up when Gemini sends nothing for this long, so the student never waits on a stalled call.
 const IDLE_TIMEOUT_MS = 30_000
@@ -11,9 +12,12 @@ export default async function handler(req, res) {
   const apiKey = req.headers['x-api-key']
   if (!apiKey) return sendError(res, 401, 'missing_key', 'Add your Gemini API key to continue.')
 
-  const messages = req.body?.messages
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return sendError(res, 400, 'bad_request', 'The request needs at least one message.')
+  let request
+  try {
+    request = parseTeachRequest(req.body)
+  } catch (error) {
+    if (error instanceof HttpError) return sendError(res, error.status, error.code, error.message)
+    throw error
   }
 
   // Aborting cancels the upstream Gemini call, so we stop paying for text nobody will read.
@@ -38,7 +42,8 @@ export default async function handler(req, res) {
   startEventStream(res)
   restartIdleTimer()
   try {
-    for await (const text of streamGemini({ apiKey, system: TUTOR_SYSTEM_PROMPT, messages, signal: controller.signal })) {
+    const stream = streamGemini({ apiKey, system: tutorSystemPrompt(request), messages: request.messages, signal: controller.signal })
+    for await (const text of stream) {
       restartIdleTimer()
       writeEvent(res, { type: 'text', text })
     }

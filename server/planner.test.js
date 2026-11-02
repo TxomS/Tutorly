@@ -14,6 +14,7 @@ const step = (overrides = {}) => ({
   keyPoints: ['Plants use light'],
   checkQuestion: 'Why do plants need light?',
   expectedAnswer: 'It gives them energy',
+  hints: [' Think of a solar panel ', 'Is it water, light or soil?'],
   sourceIds: ['p1'],
   ...overrides,
 })
@@ -24,6 +25,7 @@ const plan = (overrides = {}) => ({
   audience: '7th graders',
   style: 'Socratic',
   durationMinutes: 14.6,
+  askFirst: true,
   steps: [step()],
   ...overrides,
 })
@@ -34,6 +36,20 @@ test('validatePlan cleans a good plan and gives each step an id', () => {
   assert.equal(result.durationMinutes, 15)
   assert.equal(result.steps[0].id, 'step-1')
   assert.equal(result.steps[0].title, 'Light')
+  assert.deepEqual(result.steps[0].hints, ['Think of a solar panel', 'Is it water, light or soil?'])
+})
+
+test('validatePlan keeps whether the lesson asks first, and needs it to be a true or false value', () => {
+  assert.equal(validatePlan(plan({ askFirst: false }), passages).askFirst, false)
+  assert.throws(() => validatePlan(plan({ askFirst: undefined }), passages), /askFirst is missing/)
+  assert.throws(() => validatePlan(plan({ askFirst: 'yes' }), passages), /askFirst is missing/)
+})
+
+test('validatePlan needs exactly two hints for every step', () => {
+  assert.throws(() => validatePlan(plan({ steps: [step({ hints: ['only one'] })] }), passages), /exactly two hints/)
+  assert.throws(() => validatePlan(plan({ steps: [step({ hints: ['a', 'b', 'c'] })] }), passages), /exactly two hints/)
+  assert.throws(() => validatePlan(plan({ steps: [step({ hints: undefined })] }), passages), /exactly two hints/)
+  assert.throws(() => validatePlan(plan({ steps: [step({ hints: ['a', '  '] })] }), passages), /hint is missing/)
 })
 
 test('validatePlan drops passage ids the model invented and removes duplicates', () => {
