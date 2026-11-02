@@ -9,6 +9,12 @@ export function createLesson(plan, passages) {
 
 export const currentStep = (lesson) => lesson.plan.steps[lesson.stepIndex]
 
+/** The source passages with the given ids, in the order they appear in the source. */
+export const passagesWithIds = (lesson, ids) => lesson.passages.filter(({ id }) => ids.includes(id))
+
+/** The step a tutor message is about: the new step after moving on, otherwise the step being worked on (the last one, for the closing message). */
+export const stepForMove = (before, after, move) => currentStep(move.type === 'advance' ? after : before)
+
 /** Where the student is, for the "Step 3 of 5" display. */
 export function progressOf(lesson) {
   const total = lesson.plan.steps.length

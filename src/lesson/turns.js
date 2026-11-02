@@ -1,4 +1,4 @@
-import { currentStep, progressOf } from './lesson.js'
+import { currentStep, passagesWithIds, progressOf } from './lesson.js'
 
 // Only the latest part of the chat is sent: older messages cost tokens and the plan already holds the lesson.
 const RECENT_MESSAGES = 10
@@ -9,10 +9,7 @@ const pickStep = ({ title, goal, keyPoints, checkQuestion, expectedAnswer, hints
 const recentMessages = (messages) =>
   messages.slice(-RECENT_MESSAGES).map(({ role, content }) => ({ role: ROLE_FOR_SERVER[role], content }))
 
-function passagesFor(lesson, steps) {
-  const ids = new Set(steps.flatMap((step) => step.sourceIds))
-  return lesson.passages.filter(({ id }) => ids.has(id))
-}
+const passagesFor = (lesson, steps) => passagesWithIds(lesson, steps.flatMap((step) => step.sourceIds))
 
 /** The body for /api/assess: the step being answered, its source passages, the recent chat, and the student's answer. */
 export function assessRequest(lesson, messages, answer) {

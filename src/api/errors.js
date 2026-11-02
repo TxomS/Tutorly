@@ -7,6 +7,10 @@ export class ApiError extends Error {
   }
 }
 
+/** What to tell the user when a request failed: our server's own message, or a generic one when the server could not be reached. */
+export const describeFailure = (error) =>
+  error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.'
+
 /** Throws an ApiError from our server's `{ error: { code, message } }` body when the response is not OK. */
 export async function assertOk(response) {
   if (response.ok) return

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { applyVerdict, createLesson, currentStep, MAX_ATTEMPTS, progressOf } from './lesson.js'
+import { applyVerdict, createLesson, currentStep, MAX_ATTEMPTS, passagesWithIds, progressOf, stepForMove } from './lesson.js'
 
 const step = (n) => ({
   id: `step-${n}`,
@@ -97,6 +97,24 @@ test('applying a verdict never changes the lesson it was given', () => {
   applyVerdict(original, 'wrong')
 
   assert.equal(JSON.stringify(original), snapshot)
+})
+
+test('a message is about the new step after moving on, and about the current step otherwise', () => {
+  const start = newLesson(2)
+  const advanced = applyVerdict(start, 'correct')
+  const hinted = applyVerdict(start, 'wrong')
+  const finished = applyVerdict(advanced.lesson, 'correct')
+
+  assert.equal(stepForMove(start, advanced.lesson, advanced.move).title, 'Step 2')
+  assert.equal(stepForMove(start, hinted.lesson, hinted.move).title, 'Step 1')
+  assert.equal(stepForMove(advanced.lesson, finished.lesson, finished.move).title, 'Step 2')
+})
+
+test('passages are looked up by id and come back in source order', () => {
+  const lesson = createLesson(newLesson().plan, [{ id: 'p1', text: 'a' }, { id: 'p2', text: 'b' }, { id: 'p3', text: 'c' }])
+
+  assert.deepEqual(passagesWithIds(lesson, ['p3', 'p1']).map(({ id }) => id), ['p1', 'p3'])
+  assert.deepEqual(passagesWithIds(lesson, ['p9']), [])
 })
 
 test('a whole lesson: correct, three failures, correct', () => {
