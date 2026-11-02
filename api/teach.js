@@ -48,7 +48,8 @@ export default async function handler(req, res) {
     } else if (!controller.signal.aborted) {
       // Only the error type and status are logged: never the key or the request body.
       console.error('teach failed:', error.name, error.status)
-      writeEvent(res, { type: 'error', ...describeGeminiError(error) })
+      const { code, message } = describeGeminiError(error)
+      writeEvent(res, { type: 'error', code, message })
     }
   } finally {
     clearTimeout(idleTimer)

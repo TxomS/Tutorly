@@ -1,11 +1,4 @@
-/** An error reported by our server; `code` says what went wrong (for example "invalid_key"). */
-export class ApiError extends Error {
-  constructor(code, message) {
-    super(message)
-    this.name = 'ApiError'
-    this.code = code
-  }
-}
+import { ApiError, assertOk } from './errors.js'
 
 /**
  * POSTs `body` to `url` and calls `onEvent` for each event in the newline-delimited JSON reply.
@@ -19,10 +12,7 @@ export async function postEvents(url, { apiKey, body, signal, onEvent }) {
     signal,
   })
 
-  if (!response.ok) {
-    const { error } = await response.json().catch(() => ({}))
-    throw new ApiError(error?.code ?? 'request_failed', error?.message ?? `Request failed (${response.status})`)
-  }
+  await assertOk(response)
 
   const handleLine = (line) => {
     if (!line) return

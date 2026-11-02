@@ -1,3 +1,13 @@
+/** A failure with an HTTP status and a code the client can act on; handlers send it with `sendError`. */
+export class HttpError extends Error {
+  constructor(status, code, message) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+    this.code = code
+  }
+}
+
 /** Rejects a request before streaming starts, with a real HTTP status. */
 export function sendError(res, status, code, message) {
   res.status(status).json({ error: { code, message } })
