@@ -4,20 +4,22 @@ import { requestPlan } from '../api/planLesson.js'
 import { splitIntoPassages } from '../ingest/passages.js'
 import { useElapsedSeconds } from '../state/useElapsedSeconds.js'
 import ApiKeyField from './ApiKeyField.jsx'
+import MaterialSection from './MaterialSection.jsx'
 
 /** The first screen: the key, what the lesson should be like, and the material to teach. */
-export default function SetupScreen({ apiKey, onApiKeyChange, teacherPrompt, onTeacherPromptChange, sourceText, onSourceTextChange, onPlanned }) {
+export default function SetupScreen({ apiKey, onApiKeyChange, teacherPrompt, onTeacherPromptChange, source, onPlanned }) {
   const [isPlanning, setIsPlanning] = useState(false)
   const [error, setError] = useState('')
   const planningSeconds = useElapsedSeconds(isPlanning)
   const hasKey = apiKey.trim() !== ''
+  const isReadingFile = source.file.status === 'reading'
 
   async function createPlan(event) {
     event.preventDefault()
     setError('')
     setIsPlanning(true)
     try {
-      const passages = splitIntoPassages(sourceText)
+      const passages = splitIntoPassages(source.text)
       onPlanned({ plan: await requestPlan({ apiKey, teacherPrompt, passages }), passages })
     } catch (failure) {
       setError(describeFailure(failure))
@@ -30,7 +32,7 @@ export default function SetupScreen({ apiKey, onApiKeyChange, teacherPrompt, onT
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col gap-4 p-4">
       <header>
         <h1 className="text-2xl font-semibold">Tutorly</h1>
-        <p className="mt-1 text-slate-600">Paste what you want to teach and describe the lesson. Tutorly plans it, then teaches it to a student one step at a time.</p>
+        <p className="mt-1 text-slate-600">Upload or paste what you want to teach and describe the lesson. Tutorly plans it, then teaches it to a student one step at a time.</p>
       </header>
       <ApiKeyField value={apiKey} onChange={onApiKeyChange} />
       <form onSubmit={createPlan} className="flex flex-col gap-3">
@@ -45,20 +47,10 @@ export default function SetupScreen({ apiKey, onApiKeyChange, teacherPrompt, onT
             className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          Source text
-          <textarea
-            value={sourceText}
-            onChange={(event) => onSourceTextChange(event.target.value)}
-            placeholder="Paste the material to teach (file upload is coming)."
-            rows={8}
-            dir="auto"
-            className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
-          />
-        </label>
+        <MaterialSection source={source} />
         <button
           type="submit"
-          disabled={isPlanning || !hasKey || !teacherPrompt.trim() || !sourceText.trim()}
+          disabled={isPlanning || isReadingFile || !hasKey || !teacherPrompt.trim() || !source.text.trim() || source.isTooLong}
           className="self-start rounded-lg bg-indigo-600 px-4 py-2 font-medium tabular-nums text-white disabled:opacity-50"
         >
           {isPlanning ? `Planning… (${planningSeconds}s)` : 'Create lesson plan'}

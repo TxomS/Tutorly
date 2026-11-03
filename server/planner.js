@@ -1,9 +1,9 @@
+import { MAX_SOURCE_CHARS } from '../shared/limits.js'
 import { HttpError } from './http.js'
 import { PLANNER_SYSTEM_PROMPT } from './prompts.js'
 import { askForJson, InvalidAnswer } from './structured.js'
 
 const MAX_REQUEST_CHARS = 2_000
-const MAX_SOURCE_CHARS = 300_000
 const MAX_STEPS = 12
 
 const text = (description) => ({ type: 'string', description })
