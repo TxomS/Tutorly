@@ -1,1 +1,67 @@
 @import "tailwindcss";
+
+/* The motion for stars and celebrations. Every use is behind `motion-safe:`, so a person who asks their system for less motion gets none of it. */
+@theme {
+  --animate-star-pop: star-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-celebrate: celebrate 7s ease-in-out both;
+  --animate-celebrate-fade: celebrate-fade 7s ease-in-out both;
+  --animate-confetti: confetti 0.9s ease-out both;
+  --animate-bump: bump 0.4s ease-out;
+
+  @keyframes star-pop {
+    0% {
+      transform: scale(0) rotate(-35deg);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1) rotate(0);
+      opacity: 1;
+    }
+  }
+
+  /* Slides in (about 0.35 s), stays for about 6 s, and fades out (about 0.5 s) by itself, so nothing has to be dismissed or timed in code. */
+  @keyframes celebrate {
+    0% {
+      transform: translateY(-12px) scale(0.95);
+      opacity: 0;
+    }
+    5%,
+    93% {
+      transform: none;
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-6px);
+      opacity: 0;
+    }
+  }
+
+  /* The same, with no movement, for people who asked for less motion: a fade is still needed or the notice would never go away. */
+  @keyframes celebrate-fade {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    5%,
+    93% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes confetti {
+    0% {
+      transform: translate(0, 0) rotate(0) scale(0.4);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(1);
+      opacity: 0;
+    }
+  }
+
+  @keyframes bump {
+    40% {
+      transform: scale(1.4);
+    }
+  }
+}

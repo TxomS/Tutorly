@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { applyVerdict, createLesson, currentStep, MAX_ATTEMPTS, passagesWithIds, progressOf, stepForMove } from './lesson.js'
+import { applyVerdict, createLesson, currentStep, MAX_ATTEMPTS, MAX_STARS, passagesWithIds, progressOf, starsFor, starsOf, stepForMove } from './lesson.js'
 
 const step = (n) => ({
   id: `step-${n}`,
@@ -27,7 +27,7 @@ test('a correct answer moves to the next step', () => {
 
   assert.deepEqual(move, { type: 'advance', revealed: false })
   assert.equal(currentStep(lesson).title, 'Step 2')
-  assert.deepEqual(lesson.outcomes, ['correct'])
+  assert.deepEqual(lesson.outcomes, [{ result: 'correct', stars: 3 }])
   assert.deepEqual(progressOf(lesson), { current: 2, total: 3, finished: false })
 })
 
@@ -58,7 +58,7 @@ test('wrong answers get two hints, and the third failure explains the answer and
   assert.deepEqual(first.move, { type: 'hint', level: 1 })
   assert.deepEqual(second.move, { type: 'hint', level: 2 })
   assert.deepEqual(third.move, { type: 'advance', revealed: true })
-  assert.deepEqual(third.lesson.outcomes, ['revealed'])
+  assert.deepEqual(third.lesson.outcomes, [{ result: 'revealed', stars: 0 }])
   assert.equal(currentStep(third.lesson).title, 'Step 2')
   assert.equal(third.lesson.attempts, 0)
 })
@@ -77,7 +77,7 @@ test('a correct answer after failed attempts still counts as correct and resets 
   const { lesson, move } = applyVerdict(failed.lesson, 'correct')
 
   assert.deepEqual(move, { type: 'advance', revealed: false })
-  assert.deepEqual(lesson.outcomes, ['correct'])
+  assert.deepEqual(lesson.outcomes, [{ result: 'correct', stars: 2 }])
   assert.equal(lesson.attempts, 0)
 })
 
@@ -127,6 +127,44 @@ test('a whole lesson: correct, three failures, correct', () => {
   }
 
   assert.deepEqual(moves, ['advance', 'hint', 'hint', 'advance:revealed', 'finish'])
-  assert.deepEqual(lesson.outcomes, ['correct', 'revealed', 'correct'])
+  assert.deepEqual(lesson.outcomes, [
+    { result: 'correct', stars: 3 },
+    { result: 'revealed', stars: 0 },
+    { result: 'correct', stars: 3 },
+  ])
   assert.equal(lesson.finished, true)
+})
+
+test('a step earns fewer stars for each failed attempt before the right answer, and none when the tutor explains it', () => {
+  const starsAfter = (verdicts) => {
+    let lesson = newLesson()
+    for (const verdict of verdicts) ({ lesson } = applyVerdict(lesson, verdict))
+    return lesson.outcomes[0].stars
+  }
+
+  assert.equal(MAX_STARS, 3)
+  assert.equal(starsAfter(['correct']), 3)
+  assert.equal(starsAfter(['wrong', 'correct']), 2)
+  assert.equal(starsAfter(['partial', 'gave_up', 'correct']), 1)
+  assert.equal(starsAfter(['wrong', 'wrong', 'wrong']), 0)
+})
+
+test('asking a question or straying off topic never costs a star', () => {
+  let lesson = newLesson()
+  for (const verdict of ['question', 'off_topic', 'question', 'correct']) ({ lesson } = applyVerdict(lesson, verdict))
+
+  assert.deepEqual(lesson.outcomes, [{ result: 'correct', stars: 3 }])
+})
+
+test('a correct answer always earns a star, even if the limit on attempts is raised later', () => {
+  assert.equal(starsFor('correct', 7), 1)
+  assert.equal(starsFor('revealed', 0), 0)
+})
+
+test('the star total counts what was earned against what the whole lesson could give', () => {
+  let lesson = newLesson(3)
+  assert.deepEqual(starsOf(lesson), { earned: 0, possible: 9 })
+
+  for (const verdict of ['correct', 'wrong', 'correct']) ({ lesson } = applyVerdict(lesson, verdict))
+  assert.deepEqual(starsOf(lesson), { earned: 5, possible: 9 })
 })

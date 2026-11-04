@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { passagesWithIds, progressOf } from '../lesson/lesson.js'
+import { passagesWithIds, progressOf, starsOf } from '../lesson/lesson.js'
 import ApiKeyField from './ApiKeyField.jsx'
 import Composer from './Composer.jsx'
 import FinishedCard from './FinishedCard.jsx'
@@ -7,6 +7,7 @@ import MessageList from './MessageList.jsx'
 import ProgressBar from './ProgressBar.jsx'
 import SourceDrawer from './SourceDrawer.jsx'
 import StatusNotice from './StatusNotice.jsx'
+import StepCelebration from './StepCelebration.jsx'
 
 /** The lesson itself: progress at the top, the chat in the middle, where the student answers at the bottom. */
 export default function LessonScreen({ session, apiKey, onApiKeyChange }) {
@@ -14,6 +15,7 @@ export default function LessonScreen({ session, apiKey, onApiKeyChange }) {
   const closeSource = useCallback(() => setShownSourceIds(null), [])
   const { lesson, messages, status, error, canSend } = session
   const progress = progressOf(lesson)
+  const stars = starsOf(lesson)
 
   return (
     <div className="mx-auto flex h-dvh max-w-2xl flex-col bg-slate-50">
@@ -30,7 +32,7 @@ export default function LessonScreen({ session, apiKey, onApiKeyChange }) {
           </button>
         </div>
         <div className="mt-2">
-          <ProgressBar {...progress} />
+          <ProgressBar {...progress} stars={stars.earned} />
         </div>
         <details className="mt-2 text-sm">
           <summary className="cursor-pointer text-slate-500">API key</summary>
@@ -39,11 +41,14 @@ export default function LessonScreen({ session, apiKey, onApiKeyChange }) {
           </div>
         </details>
       </header>
-      <MessageList messages={messages} onShowSource={(message) => setShownSourceIds(message.sourceIds)}>
-        <StatusNotice status={status} error={error} canAnswer={canSend} onRetry={session.retry} />
-      </MessageList>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <MessageList messages={messages} onShowSource={(message) => setShownSourceIds(message.sourceIds)}>
+          <StatusNotice status={status} error={error} canAnswer={canSend} onRetry={session.retry} />
+        </MessageList>
+        <StepCelebration outcomes={lesson.outcomes} />
+      </div>
       {lesson.finished && status === 'idle' ? (
-        <FinishedCard outcomes={lesson.outcomes} onLeave={session.leave} />
+        <FinishedCard steps={lesson.plan.steps} outcomes={lesson.outcomes} stars={stars} onLeave={session.leave} />
       ) : (
         <Composer canSend={canSend} isReplying={status === 'replying'} onSend={session.send} onStop={session.stop} />
       )}
