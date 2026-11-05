@@ -1,4 +1,4 @@
-import { MAX_SOURCE_CHARS } from '../shared/limits.js'
+import { MAX_MEANING_CHARS, MAX_SOURCE_CHARS, MAX_TERM_CHARS, MAX_TERMS_PER_STEP } from '../shared/limits.js'
 import { HttpError } from './http.js'
 import { PLANNER_SYSTEM_PROMPT } from './prompts.js'
 import { askForJson, InvalidAnswer } from './structured.js'
@@ -37,8 +37,20 @@ const PLAN_SCHEMA = {
             maxItems: 2,
           },
           sourceIds: list({ type: 'string' }, 'Ids of the source passages this step is based on, for example "p3"'),
+          terms: {
+            ...list(
+              {
+                type: 'object',
+                properties: { term: text('The word or short phrase itself'), meaning: text('What it means, in under 10 words, without using the term') },
+                required: ['term', 'meaning'],
+              },
+              'Two key terms the student meets in this step, for the match-up game',
+            ),
+            minItems: 2,
+            maxItems: MAX_TERMS_PER_STEP,
+          },
         },
-        required: ['title', 'goal', 'keyPoints', 'checkQuestion', 'expectedAnswer', 'hints', 'sourceIds'],
+        required: ['title', 'goal', 'keyPoints', 'checkQuestion', 'expectedAnswer', 'hints', 'sourceIds', 'terms'],
       },
     },
   },
@@ -68,6 +80,21 @@ export function parsePlanRequest(body) {
     throw new HttpError(413, 'source_too_large', `The source is too long. The limit is ${MAX_SOURCE_CHARS.toLocaleString('en-US')} characters.`)
   }
   return { teacherPrompt, passages }
+}
+
+/**
+ * The key terms of a step, each with a short meaning. They only feed the match-up game, so a bad entry is dropped instead of failing the plan:
+ * a lesson with no usable terms is still a good lesson, it just has no game.
+ */
+function cleanTerms(raw) {
+  if (!Array.isArray(raw)) return []
+  const entries = raw.flatMap((entry) => {
+    const term = typeof entry?.term === 'string' ? entry.term.trim() : ''
+    const meaning = typeof entry?.meaning === 'string' ? entry.meaning.trim() : ''
+    const fits = term && meaning && term.length <= MAX_TERM_CHARS && meaning.length <= MAX_MEANING_CHARS
+    return fits ? [{ term, meaning }] : []
+  })
+  return entries.slice(0, MAX_TERMS_PER_STEP)
 }
 
 /** Returns a clean plan, or throws an InvalidAnswer saying what is wrong. Passage ids the model invented are dropped. */
@@ -111,6 +138,7 @@ export function validatePlan(raw, passages) {
         expectedAnswer: needText(step.expectedAnswer, `${label} expected answer`),
         hints,
         sourceIds,
+        terms: cleanTerms(step.terms),
       }
     }),
   }

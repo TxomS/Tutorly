@@ -3,7 +3,7 @@ import { requestAssessment } from '../api/assessAnswer.js'
 import { describeFailure } from '../api/errors.js'
 import { postEvents } from '../api/streamEvents.js'
 import { chatReducer, initialChat } from './chatReducer.js'
-import { applyVerdict, createLesson, stepForMove } from './lesson.js'
+import { applyVerdict, createLesson, finishReview, isReviewing, stepForMove } from './lesson.js'
 import { assessRequest, teachRequest } from './turns.js'
 
 /**
@@ -57,7 +57,7 @@ export function useLesson(apiKey) {
       const { verdict, feedback } = await requestAssessment({ apiKey, body: assessRequest(lesson, earlier, studentMessage.content) })
       if (run !== generation.current) return
       const { lesson: after, move } = applyVerdict(lesson, verdict)
-      dispatch({ type: 'graded', lesson: after })
+      dispatch({ type: 'lessonChanged', lesson: after })
       await reply({ before: lesson, after, move, feedback, chat: [...earlier, studentMessage] })
     } catch (error) {
       if (run === generation.current) dispatch({ type: 'failed', error: describeFailure(error) })
@@ -75,11 +75,21 @@ export function useLesson(apiKey) {
   /** Sends the student's answer. If the tutor's last reply was stopped half-way, the student moves on without it. */
   function send(text) {
     const { lesson, messages, status, replyOwed } = latest.current
-    if (!lesson || lesson.finished || (status !== 'idle' && status !== 'stopped')) return
+    if (!lesson || lesson.finished || isReviewing(lesson) || (status !== 'idle' && status !== 'stopped')) return
     if (replyOwed) dispatch({ type: 'abandoned' })
     const studentMessage = { id: newMessageId(), role: 'student', content: text }
     dispatch({ type: 'studentSaid', message: studentMessage })
     gradeAndReply({ lesson, earlier: messages, studentMessage })
+  }
+
+  /** The match-up game is over (played or skipped): the tutor starts the next step. */
+  function finishMatchUp() {
+    const { lesson, messages, status, replyOwed } = latest.current
+    if (!lesson || !isReviewing(lesson) || (status !== 'idle' && status !== 'stopped')) return
+    if (replyOwed) dispatch({ type: 'abandoned' })
+    const { lesson: after, move } = finishReview(lesson)
+    dispatch({ type: 'lessonChanged', lesson: after })
+    reply({ before: lesson, after, move, chat: messages })
   }
 
   const stop = () => replyController.current?.abort()
@@ -99,9 +109,10 @@ export function useLesson(apiKey) {
     status,
     error: state.error,
     isActive: lesson !== null,
-    canSend: lesson !== null && !lesson.finished && (status === 'idle' || status === 'stopped'),
+    canSend: lesson !== null && !lesson.finished && !isReviewing(lesson) && (status === 'idle' || status === 'stopped'),
     begin,
     send,
+    finishMatchUp,
     stop,
     retry,
     leave,

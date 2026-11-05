@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { applyVerdict, createLesson } from './lesson.js'
+import { applyVerdict, createLesson, finishReview } from './lesson.js'
 import { assessRequest, teachRequest } from './turns.js'
 
 const step = (n) => ({
@@ -103,4 +103,48 @@ test('the first message of a lesson needs no chat history', () => {
 
   assert.deepEqual(request.messages, [])
   assert.equal(request.step.title, 'Step 1')
+})
+
+const termsFor = (n) => [
+  { term: `Word ${n}a`, meaning: `Meaning ${n}a` },
+  { term: `Word ${n}b`, meaning: `Meaning ${n}b` },
+]
+const gamePlan = { ...plan, steps: [1, 2, 3, 4].map((n) => ({ ...step(n), terms: termsFor(n) })) }
+const gameLesson = () => createLesson(gamePlan, [1, 2, 3, 4].map((n) => ({ id: `p${n}`, text: `Passage ${n}` })))
+
+test('the pause for the game sends the finished step with its key terms, and no new step', () => {
+  const before = applyVerdict(gameLesson(), 'correct').lesson
+  const { lesson: after, move } = applyVerdict(before, 'correct')
+  const request = teachRequest({ before, after, move, messages: chat(2) })
+
+  assert.equal(move.type, 'checkpoint')
+  assert.equal(request.step, undefined)
+  assert.equal(request.previousStep.title, 'Step 2')
+  assert.deepEqual(request.previousStep.terms, termsFor(2))
+  assert.deepEqual(request.passages.map(({ id }) => id), ['p2'])
+  assert.deepEqual(request.lesson.progress, { current: 2, total: 4 })
+})
+
+test('after the game the request is about the new step, with no finished step', () => {
+  let current = gameLesson()
+  for (let i = 0; i < 2; i++) current = applyVerdict(current, 'correct').lesson
+  const { lesson: after, move } = finishReview(current)
+  const request = teachRequest({ before: current, after, move, messages: chat(1) })
+
+  assert.deepEqual(request.move, { type: 'resume' })
+  assert.equal(request.step.title, 'Step 3')
+  assert.equal(request.previousStep, undefined)
+  assert.deepEqual(request.passages.map(({ id }) => id), ['p3'])
+  assert.deepEqual(request.lesson.progress, { current: 3, total: 4 })
+})
+
+test('key terms go to the tutor only on the step being wrapped up, never with the step being worked on or graded', () => {
+  const start = gameLesson()
+  const hint = applyVerdict(start, 'wrong')
+  const moved = applyVerdict(start, 'correct')
+
+  assert.equal('terms' in teachRequest({ before: start, after: hint.lesson, move: hint.move, messages: chat(2) }).step, false)
+  assert.equal('terms' in teachRequest({ before: start, after: moved.lesson, move: moved.move, messages: chat(2) }).step, false)
+  assert.equal('terms' in assessRequest(start, chat(2), 'answer').step, false)
+  assert.deepEqual(teachRequest({ before: start, after: moved.lesson, move: moved.move, messages: chat(2) }).previousStep.terms, termsFor(1))
 })

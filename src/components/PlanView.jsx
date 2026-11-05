@@ -1,6 +1,9 @@
+import { planReview } from '../lesson/review.js'
 import Markdown from './Markdown.jsx'
 
 export default function PlanView({ plan }) {
+  const review = planReview(plan.steps)
+
   return (
     <section className="flex flex-col gap-4">
       <header dir="auto">
@@ -9,6 +12,11 @@ export default function PlanView({ plan }) {
           {plan.language} · {plan.audience} · {plan.style} · {plan.durationMinutes} min · {plan.steps.length} steps ·{' '}
           {plan.askFirst ? 'asks first' : 'explains first'}
         </p>
+        {review && (
+          <p className="mt-1 text-sm text-slate-500">
+            Includes a match-up game after step {review.after}, on the key words of {review.after === 1 ? 'step 1' : `steps 1 to ${review.after}`}.
+          </p>
+        )}
       </header>
       <ol className="flex flex-col gap-3">
         {plan.steps.map((step, index) => (
@@ -38,6 +46,18 @@ export default function PlanView({ plan }) {
                 ))}
               </ol>
             </div>
+            {step.terms?.length > 0 && (
+              <div className="mt-2 text-sm text-slate-500">
+                <span className="font-medium">Key words:</span>
+                <ul className="list-disc ps-6">
+                  {step.terms.map(({ term, meaning }, index) => (
+                    <li key={`${index}-${term}`} dir="auto">
+                      <span className="font-medium">{term}</span>: {meaning}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="mt-2 text-xs text-slate-500">Source passages: {step.sourceIds.join(', ')}</p>
           </li>
         ))}

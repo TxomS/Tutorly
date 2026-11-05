@@ -101,3 +101,33 @@ test('parsePlanRequest rejects bad requests with a code the client can show', ()
   assert.deepEqual(rejected({ teacherPrompt: 'Teach', passages: [{ id: 'p1', text: 'x'.repeat(300_001) }] }), { status: 413, code: 'source_too_large' })
   assert.deepEqual(rejected(undefined), { status: 400, code: 'bad_request' })
 })
+
+test("validatePlan keeps each step's key terms, trimmed", () => {
+  const terms = [{ term: ' Chlorophyll ', meaning: ' The green stuff that catches light ' }, { term: 'Stomata', meaning: 'Tiny holes in a leaf' }]
+  const result = validatePlan(plan({ steps: [step({ terms })] }), passages)
+
+  assert.deepEqual(result.steps[0].terms, [
+    { term: 'Chlorophyll', meaning: 'The green stuff that catches light' },
+    { term: 'Stomata', meaning: 'Tiny holes in a leaf' },
+  ])
+})
+
+test('validatePlan keeps a plan with no usable key terms, because the game is optional', () => {
+  assert.deepEqual(validatePlan(plan({ steps: [step()] }), passages).steps[0].terms, [])
+  assert.deepEqual(validatePlan(plan({ steps: [step({ terms: 'chlorophyll' })] }), passages).steps[0].terms, [])
+  assert.deepEqual(validatePlan(plan({ steps: [step({ terms: [null, 7, {}, { term: 'Leaf' }, { meaning: 'Green' }, { term: '  ', meaning: 'x' }] })] }), passages).steps[0].terms, [])
+})
+
+test('validatePlan drops a key term that is too long for a card and keeps the rest, up to three', () => {
+  const terms = [
+    { term: 'T'.repeat(61), meaning: 'Too long a word' },
+    { term: 'Fine', meaning: 'M'.repeat(101) },
+    { term: 'One', meaning: 'First' },
+    { term: 'Two', meaning: 'Second' },
+    { term: 'Three', meaning: 'Third' },
+    { term: 'Four', meaning: 'Fourth' },
+  ]
+  const result = validatePlan(plan({ steps: [step({ terms })] }), passages)
+
+  assert.deepEqual(result.steps[0].terms.map(({ term }) => term), ['One', 'Two', 'Three'])
+})

@@ -3,7 +3,7 @@ import { useState } from 'react'
 const MAX_ANSWER_CHARS = 2000
 
 /** Where the student types. One submit button is both "Send" and "Stop": the form handler decides, so a click can never do both. */
-export default function Composer({ canSend, isReplying, onSend, onStop }) {
+export default function Composer({ canSend, isReplying, idleHint = 'Please wait…', onSend, onStop }) {
   const [text, setText] = useState('')
 
   function handleSubmit(event) {
@@ -37,7 +37,7 @@ export default function Composer({ canSend, isReplying, onSend, onStop }) {
         rows={2}
         dir="auto"
         aria-label="Your answer"
-        placeholder={canSend ? 'Type your answer…' : isReplying ? 'The tutor is writing…' : 'Please wait…'}
+        placeholder={canSend ? 'Type your answer…' : isReplying ? 'The tutor is writing…' : idleHint}
         className="min-h-12 flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
       />
       <button

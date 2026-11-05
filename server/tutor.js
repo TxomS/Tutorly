@@ -1,7 +1,7 @@
 import { HttpError } from './http.js'
 import { parseMessages, parsePassages, parseStep, readText } from './requests.js'
 
-const MOVES = ['introduce', 'hint', 'probe', 'answer_question', 'redirect', 'advance', 'finish']
+const MOVES = ['introduce', 'hint', 'probe', 'answer_question', 'redirect', 'advance', 'checkpoint', 'resume', 'finish']
 const MAX_LEVEL = 5
 
 const bad = (what) => new HttpError(400, 'bad_request', `The request has an invalid ${what}.`)
@@ -35,8 +35,9 @@ const withStudentTurn = (messages) =>
 /** Checks the request body for the tutor and returns it cleaned, or throws an HttpError the client can show. */
 export function parseTeachRequest(body) {
   const move = parseMove(body?.move)
-  const needsStep = move.type !== 'finish'
-  const needsPreviousStep = move.type === 'advance' || move.type === 'finish'
+  // A move that wraps up a step talks about the step just finished. 'checkpoint' and 'finish' stop there; 'resume' is the one that starts the next step.
+  const needsStep = move.type !== 'finish' && move.type !== 'checkpoint'
+  const needsPreviousStep = move.type === 'advance' || move.type === 'checkpoint' || move.type === 'finish'
   const feedback = body?.feedback == null || body.feedback === '' ? undefined : readText(body.feedback, 'feedback', 1_000)
 
   return {

@@ -34,7 +34,7 @@ test('the tutor writes a message piece by piece and then it is complete', () => 
 
 test('an answer is graded before the tutor replies, and the lesson moves on at once', () => {
   const next = { stepIndex: 1, finished: false }
-  const state = run({ type: 'begun', lesson }, { type: 'studentSaid', message: student }, { type: 'grading' }, { type: 'graded', lesson: next })
+  const state = run({ type: 'begun', lesson }, { type: 'studentSaid', message: student }, { type: 'grading' }, { type: 'lessonChanged', lesson: next })
 
   assert.deepEqual(state.messages, [student])
   assert.equal(state.status, 'grading')

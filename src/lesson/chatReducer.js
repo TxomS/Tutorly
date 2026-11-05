@@ -19,8 +19,8 @@ export function chatReducer(state, action) {
       return { ...state, messages: [...state.messages, action.message] }
     case 'grading':
       return { ...state, status: 'grading', error: '' }
-    case 'graded':
-      // The progress bar moves as soon as the answer is graded, before the tutor has finished writing its reply.
+    case 'lessonChanged':
+      // The progress bar moves as soon as an answer is graded (or the match-up game is over), before the tutor has finished writing its reply.
       return { ...state, lesson: action.lesson }
     case 'replyStarted': {
       const message = { id: action.id, role: 'tutor', content: '', sourceIds: action.sourceIds, complete: false }

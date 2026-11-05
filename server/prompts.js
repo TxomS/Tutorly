@@ -19,6 +19,7 @@ Then plan the lesson:
 - checkQuestion asks the student to explain or apply the idea, not to repeat a sentence. expectedAnswer says what a correct answer contains.
 - hints: exactly two, for a student who is stuck on the checkQuestion. Hint 1 is a small nudge: an everyday example or an analogy that points toward the idea. Hint 2 narrows it down: offer two or three options to choose from (all plausible, one of them right), or name the kind of thing the answer is. A hint must NEVER state the answer, say what the answer "involves" or "relies on", use the key words of the expectedAnswer, or quote the source.
   Example, for the question "Why do we wear coats in winter?". Bad hint: "Coats trap the heat your body makes." Good hint 1: "Think about how you feel when you step outside without one." Good hint 2: "Is it about keeping heat in, keeping rain out, or looking good?"
+- terms: two key terms that this step teaches, for a match-up game in the middle of the lesson. term is the word or short phrase itself (one to three words). meaning is what it means, in under 10 words, in your own words. A meaning must NEVER contain its own term, and no two meanings in the whole lesson may be alike. Take the terms from this step's keyPoints, never from another step: the student is only asked about what they have been taught.
 - Match the vocabulary and examples to the audience.`
 
 export const ASSESSOR_SYSTEM_PROMPT = `You grade a student's reply to a check question in a lesson.
@@ -56,11 +57,19 @@ const introduceTheStep = (lesson) => (lesson.askFirst ? ASK_FIRST : EXPLAIN_FIRS
 // What the tutor is shown depends on the move. When the student must find the answer (a hint, a probe, a redirect) the tutor is not
 // shown the answer, the key points or the source at all, so it cannot give them away; the hints themselves were written in the plan.
 // An opening shows the key points and the source only when the teacher wants explanations first. An ask-first opening sees just the question.
-const opensWithExplanation = (move, lesson) => !lesson.askFirst && (move.type === 'introduce' || move.type === 'advance')
+const opensAStep = (move) => move.type === 'introduce' || move.type === 'advance' || move.type === 'resume'
+const opensWithExplanation = (move, lesson) => !lesson.askFirst && opensAStep(move)
 const showsKeyPoints = opensWithExplanation
 const showsSource = (move, lesson) => move.type === 'answer_question' || opensWithExplanation(move, lesson)
 
-function moveInstructions({ move, step, lesson }) {
+// The match-up game only asks about words the student has met. The planner writes the words, but only the tutor can make sure the student has
+// heard them, so the message that wraps up a step says each one aloud with its meaning.
+const sayTheKeyWords = (previousStep) =>
+  previousStep?.terms?.length
+    ? " Also say each of the previous step's key words (listed below) in this message with its meaning in a few words, so the student has met every one."
+    : ''
+
+function moveInstructions({ move, step, previousStep, lesson }) {
   switch (move.type) {
     case 'introduce':
       return `This is the start of the lesson. Greet the student in one short sentence and say what the lesson is about. Then teach the current step: ${introduceTheStep(lesson)}`
@@ -85,8 +94,17 @@ function moveInstructions({ move, step, lesson }) {
       return "The student's last message is not about the lesson. Reply kindly in one sentence. Do not quote the material or add hints; just bring them back by asking the check question again."
     case 'advance':
       return move.revealed
-        ? `The student could not answer the previous step's question after several tries. Kindly explain the correct answer, using the previous step's correct answer, in one short paragraph and without making them feel bad. Then move on: introduce the current step (no greeting). ${introduceTheStep(lesson)}`
-        : `The student answered the previous step's question correctly. Confirm in one short sentence why it is right. Then move on: introduce the current step (no greeting). ${introduceTheStep(lesson)}`
+        ? `The student could not answer the previous step's question after several tries. Kindly explain the correct answer, using the previous step's correct answer, in one short paragraph and without making them feel bad.${sayTheKeyWords(previousStep)} Then move on: introduce the current step (no greeting). ${introduceTheStep(lesson)}`
+        : `The student answered the previous step's question correctly. Confirm in one short sentence why it is right.${sayTheKeyWords(previousStep)} Then move on: introduce the current step (no greeting). ${introduceTheStep(lesson)}`
+    case 'checkpoint':
+      // The lesson stops here for the match-up game, so the next step must not be started.
+      return `${
+        move.revealed
+          ? "The student could not answer the previous step's question after several tries. Kindly explain the correct answer, using the previous step's correct answer, in one short paragraph and without making them feel bad."
+          : "The student answered the previous step's question correctly. Confirm in one short sentence why it is right."
+      }${sayTheKeyWords(previousStep)} Then tell them, cheerfully and in one sentence, that a quick match-up game about what they have learned so far comes next. Do NOT start the next step and do NOT ask a question.`
+    case 'resume':
+      return `The quick match-up game is over. Do not talk about how it went. Move on: introduce the current step (no greeting). ${introduceTheStep(lesson)}`
     case 'finish':
       return move.revealed
         ? "The student could not answer the last question after several tries. Kindly explain the correct answer, using the previous step's correct answer. Then wrap up the lesson: three short bullet points of what they learned (use the outline) and an encouraging goodbye. Do not ask a question."
@@ -105,8 +123,14 @@ function describeStep(label, step, { full }) {
     .join('\n')
 }
 
-const describePreviousStep = (step, revealed) =>
-  [`Previous step: ${step.title}`, `Check question: ${step.checkQuestion}`, revealed && `Correct answer to explain: ${step.expectedAnswer}`].filter(Boolean).join('\n')
+const wrapsUpAStep = (move) => move.type === 'advance' || move.type === 'checkpoint'
+
+function describePreviousStep(step, move) {
+  const keyWords = wrapsUpAStep(move) && step.terms?.length > 0 && `Key words of that step:\n${step.terms.map(({ term, meaning }) => `- ${term}: ${meaning}`).join('\n')}`
+  return [`Previous step: ${step.title}`, `Check question: ${step.checkQuestion}`, move.revealed && `Correct answer to explain: ${step.expectedAnswer}`, keyWords]
+    .filter(Boolean)
+    .join('\n')
+}
 
 /** Builds the tutor's instructions for one reply: who to be, what move to make now, and what the lesson says. */
 export function tutorSystemPrompt({ lesson, move, step, previousStep, feedback, passages }) {
@@ -117,9 +141,9 @@ export function tutorSystemPrompt({ lesson, move, step, previousStep, feedback, 
     `Write every message in ${lesson.language}.`,
     `You are a patient, encouraging tutor teaching "${lesson.title}" to ${lesson.audience}. Teaching style: ${lesson.style}.`,
     `Rules:\n${RULES}`,
-    `Your move now:\n${moveInstructions({ move, step, lesson })}`,
+    `Your move now:\n${moveInstructions({ move, step, previousStep, lesson })}`,
     step && describeStep(`Current step (${current} of ${total})`, step, { full: showsKeyPoints(move, lesson) }),
-    previousStep && describePreviousStep(previousStep, move.revealed),
+    previousStep && describePreviousStep(previousStep, move),
     move.type === 'finish' && `Lesson outline:\n${lesson.outline.map((title, index) => `${index + 1}. ${title}`).join('\n')}`,
     feedback && `Assessment of the student's last answer: ${feedback}`,
     showsSource(move, lesson) && passages.length > 0 && `<source>\n${passages.map(({ id, text }) => `[${id}]\n${text}`).join('\n\n')}\n</source>`,

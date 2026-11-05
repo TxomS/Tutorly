@@ -7,6 +7,9 @@
   --animate-celebrate-fade: celebrate-fade 7s ease-in-out both;
   --animate-confetti: confetti 0.9s ease-out both;
   --animate-bump: bump 0.4s ease-out;
+  --animate-miss: miss 0.7s ease-out;
+  --animate-miss-shake: miss-shake 0.7s ease-out;
+  --animate-match: match 0.4s ease-out;
 
   @keyframes star-pop {
     0% {
@@ -62,6 +65,44 @@
   @keyframes bump {
     40% {
       transform: scale(1.4);
+    }
+  }
+
+  /* A wrong match in the match-up game: the card flashes red and fades back. The shaking version is for people who have not asked for less motion. */
+  @keyframes miss {
+    0%,
+    40% {
+      background-color: rgb(254 202 202);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  @keyframes miss-shake {
+    0%,
+    50% {
+      background-color: rgb(254 202 202);
+      transform: translateX(0);
+    }
+    10%,
+    30% {
+      transform: translateX(-6px);
+    }
+    20%,
+    40% {
+      transform: translateX(6px);
+    }
+    100% {
+      background-color: transparent;
+      transform: translateX(0);
+    }
+  }
+
+  /* A right match: the card swells a little and settles. */
+  @keyframes match {
+    40% {
+      transform: scale(1.05);
     }
   }
 }

@@ -1,3 +1,4 @@
+import { MAX_MEANING_CHARS, MAX_TERM_CHARS, MAX_TERMS_PER_STEP } from '../shared/limits.js'
 import { HttpError } from './http.js'
 
 const MAX_TEXT_CHARS = 4_000
@@ -10,12 +11,14 @@ export function readText(value, what, maxChars = MAX_TEXT_CHARS) {
   return value.trim()
 }
 
-/** A lesson step as the browser sends it. The hints are optional: the tutor falls back to a general nudge without them. */
+/** A lesson step as the browser sends it. The hints and the key terms are optional: the tutor falls back to a general nudge without hints. */
 export function parseStep(step) {
   const keyPoints = step?.keyPoints
   const hints = step?.hints ?? []
+  const terms = step?.terms ?? []
   if (!Array.isArray(keyPoints) || keyPoints.length === 0 || keyPoints.length > 20) throw invalid('lesson step')
   if (!Array.isArray(hints) || hints.length > 3) throw invalid('lesson step')
+  if (!Array.isArray(terms) || terms.length > MAX_TERMS_PER_STEP) throw invalid('lesson step')
   return {
     title: readText(step.title, 'lesson step'),
     goal: readText(step.goal, 'lesson step'),
@@ -23,6 +26,7 @@ export function parseStep(step) {
     checkQuestion: readText(step.checkQuestion, 'lesson step'),
     expectedAnswer: readText(step.expectedAnswer, 'lesson step'),
     hints: hints.map((hint) => readText(hint, 'lesson step')),
+    terms: terms.map((entry) => ({ term: readText(entry?.term, 'lesson step', MAX_TERM_CHARS), meaning: readText(entry?.meaning, 'lesson step', MAX_MEANING_CHARS) })),
   }
 }
 

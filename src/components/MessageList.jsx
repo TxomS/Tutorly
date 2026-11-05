@@ -14,6 +14,18 @@ export default function MessageList({ messages, onShowSource, children }) {
     if (followsBottom.current) element.scrollTop = element.scrollHeight
   })
 
+  // The chat can change size without any new text (for example when the screen splits in two and the text rewraps). A student who was at the bottom stays at the bottom.
+  useEffect(() => {
+    const element = scroller.current
+    const stayAtBottom = () => {
+      if (followsBottom.current) element.scrollTop = element.scrollHeight
+    }
+    const observer = new ResizeObserver(stayAtBottom)
+    observer.observe(element)
+    observer.observe(element.firstElementChild)
+    return () => observer.disconnect()
+  }, [])
+
   function handleScroll() {
     const element = scroller.current
     followsBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < STICK_TO_BOTTOM_WITHIN
